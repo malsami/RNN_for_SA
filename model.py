@@ -34,7 +34,7 @@ print len(label[1800])
 
 class Config:
 
-	def __init__(self, learning_rate = .0001, hidden_size = 512, batch_size = 32, max_epoch = 50):
+	def __init__(self, learning_rate = .0001, hidden_size = 32, batch_size = 32, max_epoch = 50):
 
 		config_file = open('config.txt', 'w')
 
@@ -65,8 +65,8 @@ class run_model:
 		
 	def add_placeholders(self):
 
-		self.input_placeholder = tf.placeholder(tf.float32, shape= (None, self.config.batch_size, 30), name = 'input')
-		self.label_placeholder = tf.placeholder(tf.float32, shape= (None, self.config.batch_size, 1), name = 'label')
+		self.input_placeholder = tf.placeholder(tf.float32, shape= (self.config.batch_size, 30), name = 'input')
+		self.label_placeholder = tf.placeholder(tf.float32, shape= (self.config.batch_size, 1), name = 'label')
 	
 	def fill_feed_dict(self, inputs, labels, feed_previous = False):
 
@@ -84,7 +84,7 @@ class run_model:
 		total_loss = 0
 		for step in xrange(steps_per_epoch):
 			inputs, labels = self.dataset.next_batch(
-				self.dataset.datasets[0], self.config.batch_size, True)	
+				self.dataset.datasets[0], self.config.batch_size, True)		
 			if fp is None:
 				if (epoch_no > 5):
 					feed_previous = True
@@ -144,6 +144,7 @@ class run_model:
 		
 		with tf.Graph().as_default():
 			
+			#conf = tf.ConfigProto(device_count = {'GPU': 0})
 			self.add_placeholders()
 			self.prob	= self.model.inference(self.input_placeholder, self.config.hidden_size, self.config.batch_size)
 			self.loss_ops	= self.model.loss_ops( self.prob, self.label_placeholder)
@@ -152,8 +153,8 @@ class run_model:
 			init = tf.global_variables_initializer()
 
 			saver = tf.train.Saver()
-			sess = tf.Session(config = conf)
-
+			#sess = tf.Session(config = conf)
+			sess = tf.Session()
 			summary_writer = tf.summary.FileWriter('logs', sess.graph)
 
 			if (os.path.exists('last_model')):
@@ -176,10 +177,10 @@ class run_model:
 				if (valid_loss<= best_val_loss):
 					best_val_loss = valid_loss
 					best_val_epoch = epoch 
-					saver.save(sess, 'best_model')
+					saver.save(sess, './best_model')
 
 				if (epoch == self.config.max_epoch-1):
-					saver.save(sess, 'last_model')
+					saver.save(sess, './last_model')
 
 				print ("Total time:{}".format(time.time() - start))
 
@@ -201,13 +202,13 @@ class run_model:
 		pred_output = []
 				
 		for prob in output_prob:		
-			if (output_prob <= 0.5):
+			if (prob < 0.5):
 				pred_output.append(-1)
 			else:
 				pred_output.append(1)
 		for i in xrange(len(labels)):
-			print('Predicted output is: '+ pred_output[i])
-			print('Actual output is: '+ labels[i])	
+			print('Predicted output is: '+ str(pred_output[i]))
+			print('Actual output is: '+ str(labels[i]))	
 		
 	def print_titles_in_files(self, sess, data_set):	
 		
@@ -223,51 +224,49 @@ class run_model:
 		pred_output = []
 				
 		for prob in output_prob:		
-			if (output_prob <= 0.5):
+			if (prob <= 0.5):
 				pred_output.append(-1)
 			else:
 				pred_output.append(1)	
 		for i in xrange(len(labels)):
-			f1.write('Predicted output is: '+ pred_output[i] + '\n')
-			f1.write('Actual Output is : '+ labels[i] + '\n') 	 	 
+			f1.write('Predicted output is: '+ str(pred_output[i]) + '\n')
+			f1.write('Actual Output is : '+ str(labels[i]) + '\n') 	 	 
 		
 	
 class Basic_model:
 	
 	def add_cell(self, hidden_size):
 	
-		self.cell = tf.nn.rnn_cell.LSTMCell(hidden_size)	
+		cell = tf.nn.rnn_cell.LSTMCell(hidden_size)
+		self.cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.5)	
 	
 	def inference(self, inputs, hidden_size, batch_size):
 		
 		self.add_cell(hidden_size)
 				
-		hidden_state = tf.zeros([batch_size, self.cell.state_size])
-		current_state = tf.zeros([batch_size, self.cell.state_size])
-		#inputs = tf.unpack(inputs)
-		state = hidden_state, current_state
+		
 		probabilities = []
 		loss = 0.0	
 		initial_state = self.cell.zero_state(batch_size, dtype=tf.float32)
-		
-		rnn_outputs, rnn_states = tf.nn.dynamic_rnn(cell=self.cell, inputs=inputs, initial_state=initial_state)
-		print(inputs.get_shape())
-		print(rnn_outputs.get_shape())
-		print(tf.shape(rnn_outputs))
-		logit =  rnn_outputs[:,:,511]
+		rnn_outputs, rnn_states = self.cell(inputs, initial_state)
+		logit =  tf.layers.dense(rnn_outputs, 1)
+		print(logit.shape)
 		prob = tf.sigmoid(logit)
 		return prob
 		
 	def loss_ops(self, prob, labels):
 		
 		
+		print(prob.get_shape())
+		print(labels.get_shape())
 		loss = tf.reduce_mean(tf.losses.log_loss(
 		            labels,
 		            prob,
 		            weights=1.0,
 		            scope=None,
-		            loss_collection=ops.GraphKeys.LOSSES,
-		            reduction=Reduction.SUM_BY_NONZERO_WEIGHTS))	
+		            loss_collection=tf.GraphKeys.LOSSES,
+		            #reduction=Reduction.SUM_BY_NONZERO_WEIGHTS
+		            ))	
 		'''            
 		prob.
 		loss = [tf.nn.sparse_softmax_cross_entropy_with_logits(p, l) for p, l in zip(math_ops.to_float(prob), labels)]	
