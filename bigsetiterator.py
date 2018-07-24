@@ -11,6 +11,8 @@ class Datatype:
 		self.input = input_data
 		self.label = label
 		self.num_samples = num_samples
+		self.global_count_train = 0
+		self.global_count_test = 0
 		
 	
 class Dataset:
@@ -33,7 +35,7 @@ class Dataset:
 			count = dt.global_count_test
 		
 		input_data, count1 = self.make_batch(dt.input, batch_size, 30, count)	
-		output_data, _	 = self.make_batch(dt.labels, batch_size, 1, count)
+		output_data, _	 = self.make_batch(dt.label, batch_size, 1, count)
 		
 		if (c == True): 
 			dt.global_count_train = count1 % dt.num_samples
